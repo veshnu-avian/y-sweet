@@ -8,15 +8,14 @@ on:
     branches: [ "main" ]
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  AWS_REGION: us-east-1
+  IMAGE_NAME: 113889330187.dkr.ecr.us-east-1.amazonaws.com/y-sweet
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
       id-token: write
 
     steps:
@@ -32,22 +31,27 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
 
-      - name: Log into registry ${{ env.REGISTRY }}
+      - name: Configure AWS credentials (OIDC)
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          role-to-assume: arn:aws:iam::113889330187:role/yw-ysweet-push
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        if: github.event_name != 'pull_request'
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.IMAGE_NAME }}
           tags: |
             type=sha,enable=true,priority=100,prefix=sha-,suffix=,format=short
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
 
       - uses: depot/setup-action@v1
 

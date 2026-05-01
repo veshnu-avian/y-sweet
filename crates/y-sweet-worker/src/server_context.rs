@@ -1,7 +1,7 @@
 use crate::{config::Configuration, error::Error, r2_store::R2Store};
 use std::sync::Arc;
 use worker::{Env, Request};
-use y_sweet_core::{auth::Authenticator, store::s3::S3Store, store::Store};
+use y_sweet_core::{auth::Authenticator, store::s3::WasmS3Store, store::Store};
 
 const CONTEXT_HEADER: &str = "X-Y-Sweet-Context";
 const ROUTE_HEADER: &str = "X-Y-Sweet-Route";
@@ -17,7 +17,7 @@ impl ServerContext {
     pub fn new(config: Configuration, env: &Env) -> Self {
         let bucket = env.bucket(&config.bucket).unwrap();
         let store: Box<dyn Store> = if let Some(s3) = config.s3_store_config.as_ref() {
-            Box::new(S3Store::new(s3.clone()))
+            Box::new(WasmS3Store::new(s3.clone()))
         } else {
             Box::new(R2Store::new(bucket, config.bucket_prefix.clone()))
         };

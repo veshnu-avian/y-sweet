@@ -20,8 +20,6 @@ bytes = "1.5.0"
 data-encoding = "2.4.0"
 getrandom = { version = "0.2.10", features = ["js"] }
 rand = "0.8.5"
-reqwest = { version = "0.12.5", default-features = false, features = ["rustls-tls-webpki-roots"] }
-rusty-s3 = "0.5.0"
 serde = { version = "1.0.173", features = ["derive"] }
 serde_json = "1.0.103"
 sha2 = "0.10.7"
@@ -35,6 +33,11 @@ yrs-kvstore = "0.3.0"
 aws-config = "1"
 aws-sdk-s3 = "1"
 aws-credential-types = "1"
+tokio = { version = "1", features = ["sync"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+reqwest = { version = "0.12.5", default-features = false, features = ["rustls-tls-webpki-roots"] }
+rusty-s3 = "0.5.0"
 
 [dev-dependencies]
 tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread"] }

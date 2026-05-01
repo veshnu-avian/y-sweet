@@ -1,5 +1,6 @@
-use super::{Result, StoreError};
-use crate::store::Store;
+#![cfg(target_arch = "wasm32")]
+
+use crate::store::{Result, Store, StoreError};
 use async_trait::async_trait;
 use bytes::Bytes;
 use reqwest::{Client, Method, Response, StatusCode, Url};
@@ -25,7 +26,7 @@ pub struct S3Config {
 
 const PRESIGNED_URL_DURATION: Duration = Duration::from_secs(60 * 60);
 
-pub struct S3Store {
+pub struct WasmS3Store {
     bucket: Bucket,
     _bucket_checked: OnceLock<()>,
     client: Client,
@@ -33,7 +34,7 @@ pub struct S3Store {
     prefix: Option<String>,
 }
 
-impl S3Store {
+impl WasmS3Store {
     pub fn new(config: S3Config) -> Self {
         let credentials = if let Some(token) = config.token {
             Credentials::new_with_token(config.key, config.secret, token)
@@ -57,7 +58,7 @@ impl S3Store {
             .expect("Url has a valid scheme and host");
         let client = Client::new();
 
-        S3Store {
+        WasmS3Store {
             bucket,
             _bucket_checked: OnceLock::new(),
             client,
@@ -122,9 +123,7 @@ impl S3Store {
         let result = self.store_request(Method::HEAD, action, None).await;
 
         match result {
-            // Normally a 404 indicates that we are attempting to fetch an object that does
-            // not exist, but we have only attempted to retrieve a bucket, so here it
-            // indicates that the bucket does not exist.
+            // A 404 here means the bucket does not exist (we are HEADing the bucket itself).
             Err(StoreError::DoesNotExist(_)) => {
                 return Err(StoreError::BucketDoesNotExist(
                     "Bucket does not exist.".to_string(),
@@ -199,33 +198,8 @@ impl S3Store {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-#[async_trait]
-impl Store for S3Store {
-    async fn init(&self) -> Result<()> {
-        self.init().await
-    }
-
-    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        self.get(key).await
-    }
-
-    async fn set(&self, key: &str, value: Vec<u8>) -> Result<()> {
-        self.set(key, value).await
-    }
-
-    async fn remove(&self, key: &str) -> Result<()> {
-        self.remove(key).await
-    }
-
-    async fn exists(&self, key: &str) -> Result<bool> {
-        self.exists(key).await
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
 #[async_trait(?Send)]
-impl Store for S3Store {
+impl Store for WasmS3Store {
     async fn init(&self) -> Result<()> {
         self.init().await
     }

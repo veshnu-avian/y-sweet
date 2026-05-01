@@ -18,12 +18,11 @@ use y_sweet::stores::filesystem::FileSystemStore;
 use y_sweet_core::{
     auth::Authenticator,
     store::{
-        s3::{S3Config, S3Store},
+        s3::{ServerS3Config, ServerS3Store},
         Store,
     },
 };
 
-const DEFAULT_S3_REGION: &str = "us-east-1";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Parser)]
@@ -97,49 +96,17 @@ enum ServSubcommand {
     },
 }
 
-const S3_ACCESS_KEY_ID: &str = "AWS_ACCESS_KEY_ID";
-const S3_SECRET_ACCESS_KEY: &str = "AWS_SECRET_ACCESS_KEY";
-const S3_SESSION_TOKEN: &str = "AWS_SESSION_TOKEN";
-const S3_REGION: &str = "AWS_REGION";
-const S3_ENDPOINT: &str = "AWS_ENDPOINT_URL_S3";
-const S3_USE_PATH_STYLE: &str = "AWS_S3_USE_PATH_STYLE";
-fn parse_s3_config_from_env_and_args(
-    bucket: String,
-    prefix: Option<String>,
-) -> anyhow::Result<S3Config> {
-    let use_path_style = env::var(S3_USE_PATH_STYLE).ok();
-    let path_style = if let Some(use_path_style) = use_path_style {
-        if use_path_style.to_lowercase() == "true" {
-            true
-        } else if use_path_style.to_lowercase() == "false" || use_path_style.is_empty() {
-            false
-        } else {
-            anyhow::bail!(
-                "If AWS_S3_USE_PATH_STYLE is set, it must be either \"true\" or \"false\""
-            )
-        }
-    } else {
-        false
-    };
-
-    Ok(S3Config {
-        key: env::var(S3_ACCESS_KEY_ID)
-            .map_err(|_| anyhow::anyhow!("{} env var not supplied", S3_ACCESS_KEY_ID))?,
-        region: env::var(S3_REGION).unwrap_or_else(|_| DEFAULT_S3_REGION.to_string()),
-        endpoint: env::var(S3_ENDPOINT).unwrap_or_else(|_| {
-            format!(
-                "https://s3.dualstack.{}.amazonaws.com",
-                env::var(S3_REGION).unwrap_or_else(|_| DEFAULT_S3_REGION.to_string())
-            )
-        }),
-        secret: env::var(S3_SECRET_ACCESS_KEY)
-            .map_err(|_| anyhow::anyhow!("{} env var not supplied", S3_SECRET_ACCESS_KEY))?,
-        token: env::var(S3_SESSION_TOKEN).ok(),
+/// Build a `ServerS3Config` from a parsed bucket + optional prefix.
+///
+/// y-sweet's binary intentionally does not read `AWS_*` env vars itself —
+/// the AWS SDK's default provider chain reads `AWS_REGION`,
+/// `AWS_ENDPOINT_URL_S3`, `AWS_S3_USE_PATH_STYLE`, and the credential vars
+/// directly when the SDK client is built lazily on first use.
+fn parse_server_s3_config(bucket: String, bucket_prefix: Option<String>) -> ServerS3Config {
+    ServerS3Config {
         bucket,
-        bucket_prefix: prefix,
-        // If the endpoint is overridden, we assume that the user wants path-style URLs.
-        path_style,
-    })
+        bucket_prefix,
+    }
 }
 
 fn get_store_from_opts(store_path: &str) -> Result<Box<dyn Store>> {
@@ -151,8 +118,8 @@ fn get_store_from_opts(store_path: &str) -> Result<Box<dyn Store>> {
             .to_owned();
         let bucket_prefix = url.path().trim_start_matches('/').to_owned();
         let bucket_prefix = (!bucket_prefix.is_empty()).then_some(bucket_prefix); // "" => None
-        let config = parse_s3_config_from_env_and_args(bucket, bucket_prefix)?;
-        let store = S3Store::new(config);
+        let config = parse_server_s3_config(bucket, bucket_prefix);
+        let store = ServerS3Store::new(config);
         Ok(Box::new(store))
     } else {
         Ok(Box::new(FileSystemStore::new(PathBuf::from(store_path))?))
@@ -299,8 +266,8 @@ async fn main() -> Result<()> {
                     None
                 };
 
-                let s3_config = parse_s3_config_from_env_and_args(bucket, prefix)?;
-                let store = S3Store::new(s3_config);
+                let s3_config = parse_server_s3_config(bucket, prefix);
+                let store = ServerS3Store::new(s3_config);
                 let store: Box<dyn Store> = Box::new(store);
                 store.init().await?;
                 Some(store)
